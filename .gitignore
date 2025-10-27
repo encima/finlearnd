@@ -1,4 +1,5 @@
 .web/
+venv/
 .states/
 __pycache__/
 /app/__pycache__/
