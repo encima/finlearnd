@@ -122,18 +122,21 @@
   
 - [x] **CREATE SQLITE DATABASE SCHEMA** ✅
   - [x] Create normalized relational schema
-  - [x] Table: `words` (id, word, pos, definition, etymology, frequency)
+  - [x] Table: `words` (id, word, pos)
+  - [x] Table: `translations` (id, word_id, language_code, translation, definition)
   - [x] Table: `verb_conjugations` (word_id, person, form)
   - [x] Table: `noun_declensions` (word_id, case_name, singular, plural)
-  - [x] Table: `pronunciations` (word_id, ipa)
-  - [x] Add indexes on word and pos columns for fast lookups
+  - [x] Add indexes on word, pos, language_code, and translation columns
   - [x] Store database at `.web/finnish_dictionary.db`
   
 - [x] **CREATE DATABASE HELPER MODULE** ✅
   - [x] Implement `get_word_details(word)` in app/utils/db_helper.py
-  - [x] Query SQLite for verb conjugations
-  - [x] Query SQLite for noun declensions
-  - [x] Return same TypedDict format (Verb | Noun) for compatibility
+  - [x] Query SQLite for verb conjugations with translations
+  - [x] Query SQLite for noun declensions with translations
+  - [x] Return TypedDict format (Verb | Noun) with translations field
+  - [x] Add `get_translations(word, target_lang)` - Get all translations for a word
+  - [x] Add `search_by_translation(english_word)` - Find Finnish words by English meaning
+  - [x] Add `get_word_with_full_details(word)` - Complete word data with JOIN queries
   - [x] Handle case-insensitive lookups
   - [x] Return None if word not found
   
@@ -142,13 +145,43 @@
   - [x] Replace Wiktionary scraping with local database queries
   - [x] Add fallback to Wiktionary if word not in local database
   - [x] Maintain same UI and TypedDict structure
+  - [x] Display English translations in Word Lookup UI
   - [x] Add toast messages indicating local vs external lookup
   - [x] Test with verbs: puhua, olla, tulla
   - [x] Test with nouns: talo, kissa, auto
 
 ---
 
-## Phase 10: Spaced Repetition & Advanced Features
+## Phase 10: Normalized Translation Table & Cross-Language Queries ✅
+- [x] **NORMALIZE DATABASE SCHEMA** ✅
+  - [x] Remove `definition` column from `words` table
+  - [x] Move all translation data to separate `translations` table
+  - [x] Support multiple languages via `language_code` field (en, fi, sv, de, etc.)
+  - [x] Enable one-to-many relationship: one word → many translations
+  - [x] Add indexes on `language_code` and `translation` for fast lookups
+  
+- [x] **ENHANCED QUERY CAPABILITIES** ✅
+  - [x] Finnish → English translation queries with JOIN
+  - [x] English → Finnish reverse lookup via translation table
+  - [x] Cross-table queries combining words + translations + inflections
+  - [x] Support for querying multiple translations per word
+  - [x] Normalized structure eliminates duplicate translation data
+  
+- [x] **NEW QUERY FUNCTIONS IN db_helper.py** ✅
+  - [x] `get_translations(word, target_lang)` - Get all translations
+  - [x] `search_by_translation(english_word)` - Find Finnish words by English meaning
+  - [x] `get_word_with_full_details(word)` - Complete word data with JOINs
+  - [x] Update `get_word_details()` to include translations list
+  
+- [x] **UPDATE UI TO DISPLAY TRANSLATIONS** ✅
+  - [x] Show English translations in Word Lookup interface
+  - [x] Display multiple translations if available
+  - [x] Add visual separator between translations and inflection tables
+  - [x] Update TypedDicts to include `translations: list[dict]` field
+
+---
+
+## Phase 11: Spaced Repetition & Advanced Features
 - [ ] Implement spaced repetition algorithm based on user performance
 - [ ] Add "confidence rating" after each flashcard: Easy/Good/Hard/Again
 - [ ] Schedule word reviews based on forgetting curve
@@ -157,6 +190,8 @@
 - [ ] Implement word mastery levels: Learning → Familiar → Mastered
 - [ ] Add vocabulary quiz mode with multiple choice from learned words
 - [ ] Show word frequency rank on flashcards (e.g., "#15 most common")
+- [ ] Add English → Finnish translation search in Word Lookup
+- [ ] Create "Similar Words" feature using translation table relationships
 
 ---
 
@@ -169,7 +204,7 @@
 - User level tracking: Beginner (A1-A2), Intermediate (B1-B2), Advanced (C1-C2)
 
 ## Current Focus
-🎯 **Phase 9: Kaikki.org Local Dictionary Database - Ready for testing**
+🎯 **Phase 10: Normalized Translation Table - COMPLETE!**
 
 ## How to Use the Dictionary Downloader
 
@@ -187,60 +222,50 @@ python -m app.utils.dictionary_downloader import
 - Word lookups will be instant (no network requests)
 - Works offline after initial download
 - Contains 100,000+ Finnish words with full conjugations/declensions
+- **NEW**: Includes English translations for all words
+- **NEW**: Supports reverse lookup (English → Finnish)
 
-## Technical Implementation Notes
+## Normalized Database Schema
 
-### Kaikki.org Dictionary Integration
-- **Source**: https://kaikki.org/dictionary/Finnish/kaikki.org-dictionary-Finnish.jsonl
-- **Format**: JSONL (JSON Lines) - one entry per line
-- **Size**: 246 MB (uncompressed), ~100,000 entries
-- **Data Structure**: 
-  - Entry contains: word, pos, senses (definitions), forms (inflections), etymology
-  - Forms array has 50-200+ entries per word with grammatical tags
-  - Tags indicate person, number, case, tense, mood, etc.
-  
-### Verb Conjugation Extraction
-- Filter forms by tags: `['present', 'indicative', 'first-person', 'singular']` → minä form
-- Skip negative forms (tags containing 'negative')
-- Extract all 6 persons: minä, sinä, hän, me, te, he
-- Extract verb type from inflection_templates or class tag (e.g., '52/sanoa')
-
-### Noun Declension Extraction
-- Filter forms by case tags: nominative, genitive, partitive, etc.
-- Determine singular/plural by checking for 'singular' or 'plural' in tags
-- Store both forms for all 15 Finnish noun cases
-- Handle special cases like comitative and instructive
-
-### Database Structure
+### Tables
 ```sql
-CREATE TABLE words (
-    id INTEGER PRIMARY KEY,
-    word TEXT NOT NULL,
-    pos TEXT NOT NULL,  -- 'verb' or 'noun'
-    definition TEXT
-);
+-- Core word table (language-agnostic)
+words (id, word, pos)
 
-CREATE TABLE verb_conjugations (
-    word_id INTEGER,
-    person TEXT NOT NULL,  -- 'minä', 'sinä', 'hän', 'me', 'te', 'he'
-    form TEXT NOT NULL,
-    FOREIGN KEY(word_id) REFERENCES words(id)
-);
+-- Translations table (supports multiple languages)
+translations (id, word_id, language_code, translation, definition)
 
-CREATE TABLE noun_declensions (
-    word_id INTEGER,
-    case_name TEXT NOT NULL,  -- 'nominative', 'genitive', etc.
-    singular TEXT,
-    plural TEXT,
-    FOREIGN KEY(word_id) REFERENCES words(id)
-);
+-- Verb conjugations
+verb_conjugations (word_id, person, form)
+
+-- Noun declensions  
+noun_declensions (word_id, case_name, singular, plural)
 ```
 
-### Performance Optimization
-- Indexed lookups on word column: O(log n) query time
-- Single SQL query retrieves all conjugations/declensions
-- No network requests after initial database creation
-- ~10 MB database file size after compression
+### Example Queries
+
+**Get English translations for "talo":**
+```sql
+SELECT t.translation FROM translations t
+JOIN words w ON t.word_id = w.id
+WHERE w.word = 'talo' AND t.language_code = 'en'
+```
+
+**Find Finnish words meaning "house":**
+```sql
+SELECT w.word FROM words w
+JOIN translations t ON t.word_id = w.id  
+WHERE t.translation = 'house' AND w.pos = 'noun'
+```
+
+**Get complete word details (translations + conjugations):**
+```sql
+SELECT w.word, t.translation, vc.person, vc.form
+FROM words w
+JOIN translations t ON t.word_id = w.id
+JOIN verb_conjugations vc ON vc.word_id = w.id
+WHERE w.word = 'puhua'
+```
 
 ## Completed Features
 ✅ Translation Practice with error tracking
@@ -268,7 +293,11 @@ CREATE TABLE noun_declensions (
 ✅ Progress counter showing current position in word list (1/200)
 ✅ Background task error fixed - page loads without errors
 ✅ Word Lookup generalized to support both verbs and nouns with automatic type detection
-✅ **Kaikki.org dictionary downloader and SQLite importer** 🆕
-✅ **Local database with 100,000+ Finnish words** 🆕
-✅ **Offline word lookup with instant query speed** 🆕
-✅ **Command-line tool for dictionary management** 🆕
+✅ **Kaikki.org dictionary downloader and SQLite importer**
+✅ **Local database with 100,000+ Finnish words**
+✅ **Offline word lookup with instant query speed**
+✅ **Command-line tool for dictionary management**
+✅ **Normalized translation table supporting multiple languages** 🆕
+✅ **English ↔ Finnish bidirectional lookup** 🆕
+✅ **Cross-table JOIN queries for complete word data** 🆕
+✅ **Multiple translations per word support** 🆕

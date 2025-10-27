@@ -23,9 +23,18 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS words (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            word TEXT NOT NULL,
-            pos TEXT NOT NULL,
-            definition TEXT
+            word TEXT NOT NULL UNIQUE,
+            pos TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS translations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word_id INTEGER NOT NULL,
+            language_code TEXT NOT NULL,
+            translation TEXT NOT NULL,
+            definition TEXT,
+            FOREIGN KEY(word_id) REFERENCES words(id)
         )
     """)
     cursor.execute("""
@@ -47,6 +56,12 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_word ON words (word);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pos ON words (pos);")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_lang_code ON translations (language_code);"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_translation ON translations (translation);"
+    )
     conn.commit()
     conn.close()
 
@@ -111,12 +126,23 @@ def import_to_sqlite():
                 continue
             word = entry.get("word")
             pos = entry.get("pos")
-            definition = entry.get("senses", [{}])[0].get("glosses", ["-"])[0]
-            cursor.execute(
-                "INSERT INTO words (word, pos, definition) VALUES (?, ?, ?)",
-                (word, pos, definition),
-            )
-            word_id = cursor.lastrowid
+            cursor.execute("SELECT id FROM words WHERE word = ?", (word,))
+            existing_word = cursor.fetchone()
+            if existing_word:
+                word_id = existing_word[0]
+            else:
+                cursor.execute(
+                    "INSERT INTO words (word, pos) VALUES (?, ?)", (word, pos)
+                )
+                word_id = cursor.lastrowid
+            senses = entry.get("senses", [])
+            for sense in senses:
+                glosses = sense.get("glosses", [])
+                for gloss in glosses:
+                    cursor.execute(
+                        "INSERT INTO translations (word_id, language_code, translation, definition) VALUES (?, ?, ?, ?)",
+                        (word_id, "en", gloss, gloss),
+                    )
             forms = entry.get("forms", [])
             if pos == "verb":
                 conjugations = _parse_verb_forms(forms)
